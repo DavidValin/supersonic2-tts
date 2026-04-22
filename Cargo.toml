@@ -1,0 +1,46 @@
+[package]
+name = "supertonic2-tts"
+description = "extremely fast tts using supersonic2 model"
+version = "1.0.0"
+edition = "2021"
+default-run = "main"
+license = "MIT"
+repository = "https://github.com/DavidValin/supersonic2-tts"
+authors = ["ANLGBOY", "David Valin"]
+
+[dependencies]
+# Async runtime for TtsEngine
+# tokio required for async lock and potential async I/O
+# (use full feature set for simplicity)
+tokio = { version = "1", features = ["full"] }
+# ONNX Runtime
+ort = { version = "2.0.0-rc.12", features = ["ndarray"] }
+
+# Audio playback
+cpal = "0.15"
+# Array processing (like NumPy)
+ndarray = { version = "0.17", features = ["rayon"] }
+rand = "0.8"
+rand_distr = "0.4"
+# Parallel processing
+rayon = "1.10"
+# Audio processing
+hound = "3.5"
+rustfft = "6.2"
+# JSON serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive"] }
+# Error handling
+anyhow = "1.0"
+# Unicode normalization
+unicode-normalization = "0.1"
+# Regular expressions
+regex = "1.10"
+# System calls
+libc = "0.2"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
