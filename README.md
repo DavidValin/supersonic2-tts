@@ -2,15 +2,15 @@
 
 Extremely fast tts for rust with realistic voices, different styles, speed support.
 
-# Language support / Voice styles
+## Language support / Voice styles
 
 (Each language has 4 female and 5 male voice styles)
 
-* en (English)
-* es (Spanish)
-* fr (French)
-* ko (Korean)
-* pt (Portuguese)
+* 🇬🇧 en (English)
+* 🇪🇸 es (Spanish)
+* 🇫🇷 fr (French)
+* 🇰🇷 ko (Korean)
+* 🇵🇹 pt (Portuguese)
 
 ## Quickstart
 
