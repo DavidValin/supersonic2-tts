@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
     let onnx = base.join("onnx");
 
     // Create a new engine with the custom base path
-    let engine = TtsEngine::new_with_base(onnx, base, false).await?;
+    let engine = TtsEngine::new(onnx, base, false).await?;
 
     // Synthesize a phrase in Spanish using the M3 voice style
     let wav = engine
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
 The public API is intentionally minimal:
 
 * `TtsEngine::new()` – loads the default assets next to the binary.
-* `TtsEngine::new_with_base(onnx_dir, base_path, use_gpu)` – allows you to point
+* `TtsEngine::new(onnx_dir, base_path, verbose)` – allows you to point
   the engine at any directory structure.
 * `synthesize_with_options(...)` – synthesize text with optional voice
   style, speed, gain and language.

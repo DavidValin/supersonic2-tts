@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     // Initialize the engine
     let root_path = PathBuf::from(&args.root_models_path);
     let onnx_dir = root_path.join("onnx");
-    let engine = TtsEngine::new_with_base(onnx_dir, root_path).await?;
+    let engine = TtsEngine::new(onnx_dir, root_path, true).await?;
 
     // Synthesize
     let wav = engine
