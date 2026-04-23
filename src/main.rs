@@ -1,6 +1,6 @@
 use clap::Parser;
 use anyhow::Result;
-use supertonic2_tts::TtsEngine;
+use supersonic2_tts::TtsEngine;
 use std::path::PathBuf;
 
 /// CLI arguments for the new example

@@ -1,4 +1,4 @@
-# supertonic2-tts
+# supersonic2-tts
 
 Extremely fast tts for rust with realistic voices, different styles, speed support.
 
@@ -51,13 +51,13 @@ tar xvf model/supersonic2-model.tgz
 
 Install crate, add dependency to your Cargo.toml
 ```
-cargo install supertonic2-tts
+cargo install supersonic2-tts
 ```
 
 Use the library (example):
 
 ```rust
-use supertonic2_tts::TtsEngine;
+use supersonic2_tts::TtsEngine;
 use std::path::PathBuf;
 use anyhow::Result;
 
