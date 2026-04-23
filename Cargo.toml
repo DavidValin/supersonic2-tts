@@ -1,6 +1,6 @@
 [package]
-name = "supertonic2-tts"
-description = "extremely fast tts using supersonic2 model"
+name = "supersonic2-tts"
+description = "extremely fast tts using supersonic 2 model"
 version = "1.0.1"
 edition = "2021"
 default-run = "main"
