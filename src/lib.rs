@@ -1,8 +1,7 @@
 pub mod helper;
 
 use anyhow::{anyhow, Result};
-use helper::{load_text_to_speech, load_voice_style, write_wav_file, TextToSpeech};
-use std::io::Read;
+use helper::{load_text_to_speech, load_voice_style, set_verbose, write_wav_file, TextToSpeech};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -12,34 +11,21 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 pub struct TtsEngine {
     inner: Arc<Mutex<TextToSpeech>>,
     base_path: PathBuf,
+    verbose: bool,
 }
 
 impl TtsEngine {
     /// Create a new TTS engine. Loads the ONNX model files from the provided `onnx_dir`.
-    pub async fn new() -> Result<Self> {
-        // Determine absolute path to assets directory relative to the executable
-        let exe_path = std::env::current_exe()?;
-        let base_path = exe_path.parent().ok_or_else(|| anyhow!("Could not determine executable parent directory"))?;
-        let onnx_dir = base_path.join("onnx");
+    pub async fn new(onnx_dir: PathBuf, base_path: PathBuf, verbose: bool) -> Result<Self> {
         if !onnx_dir.exists() {
             std::fs::create_dir_all(&onnx_dir)?;
         }
         let tts = load_text_to_speech(onnx_dir.to_str().unwrap(), false)?;
-        Ok(Self {
-            inner: Arc::new(Mutex::new(tts)),
-            base_path: base_path.to_path_buf(),
-        })
-    }
-
-    /// Create a TTS engine with a custom ONNX directory and base path.
-    pub async fn new_with_base(onnx_dir: PathBuf, base_path: PathBuf) -> Result<Self> {
-        if !onnx_dir.exists() {
-            std::fs::create_dir_all(&onnx_dir)?;
-        }
-        let tts = load_text_to_speech(onnx_dir.to_str().unwrap(), false)?;
+        set_verbose(verbose);
         Ok(Self {
             inner: Arc::new(Mutex::new(tts)),
             base_path,
+            verbose,
         })
     }
 
@@ -68,11 +54,11 @@ impl TtsEngine {
                     base_path.join(format!("voice_styles/{}.json", v))
                 }
             };
-            load_voice_style(&[path.to_str().unwrap().to_string()], true)?
+            load_voice_style(&[path.to_str().unwrap().to_string()], self.verbose)?
         } else {
             // default to M1.json
             let path = base_path.join("voice_styles/M1.json");
-            load_voice_style(&[path.to_str().unwrap().to_string()], true)?
+            load_voice_style(&[path.to_str().unwrap().to_string()], self.verbose)?
         };
 
         let mut tts = self.inner.lock().await;

@@ -2,6 +2,14 @@
 // TTS Helper Module - All utility functions and structures
 // ============================================================================
 
+use std::sync::atomic::{AtomicBool, Ordering};
+static VERBOSE: AtomicBool = AtomicBool::new(false);
+
+/// Set global verbose flag used by helper print statements
+pub fn set_verbose(v: bool) {
+    VERBOSE.store(v, Ordering::Relaxed);
+}
+
 use ndarray::{Array, Array3};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -505,10 +513,10 @@ where
     F: FnOnce() -> Result<T>,
 {
     let start = std::time::Instant::now();
-    println!("{}...", name);
+    if VERBOSE.load(Ordering::Relaxed) { println!("{}...", name); }
     let result = f()?;
     let elapsed = start.elapsed().as_secs_f64();
-    println!("  -> {} completed in {:.2} sec", name, elapsed);
+    if VERBOSE.load(Ordering::Relaxed) { println!("  -> {} completed in {:.2} sec", name, elapsed); }
     Ok(result)
 }
 
@@ -792,7 +800,7 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
     let dp_style = Array3::from_shape_vec((bsz, dp_dim1, dp_dim2), dp_flat)?;
 
     if verbose {
-        println!("Loaded {} voice styles\n", bsz);
+        if VERBOSE.load(Ordering::Relaxed) { println!("Loaded {} voice styles\n", bsz); }
     }
 
     Ok(Style {
@@ -806,7 +814,6 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech
     if use_gpu {
         anyhow::bail!("GPU mode is not supported yet");
     }
-    println!("Using CPU for inference\n");
 
     let cfgs = load_cfgs(onnx_dir)?;
 
