@@ -1,10 +1,13 @@
 # supersonic2-tts
 
 Extremely fast tts for rust with realistic voices, different styles, speed support.
+Perfect for embedded devices.
+
+* Model size: 234 MB
 
 ## Language support / Voice styles
 
-(Each language has 4 female and 5 male voice styles)
+(Each language has 5 female and 5 male voice styles)
 
 * 🇬🇧 en (English)
 * 🇪🇸 es (Spanish)
