@@ -3,7 +3,7 @@
 Extremely fast tts for rust with realistic voices, different styles, speed support.
 Perfect for embedded devices.
 
-* Model size: 234 MB
+* Model size: 234 MB [⬇️Download](https://github.com/DavidValin/supersonic2-tts/releases/download/1.0.3/supersonic2-model.tgz)
 
 ## Language support / Voice styles
 
@@ -19,7 +19,7 @@ Perfect for embedded devices.
 
 A small cli is provided in `src/main.rs`.  It exposes the same options as the library but as a command‑line interface.
 
-Unzip the supersonic2 model:
+Unzip the supersonic2 model [⬇️Download](https://github.com/DavidValin/supersonic2-tts/releases/download/1.0.3/supersonic2-model.tgz):
 ```sh
 tar xvf model/supersonic2-model.tgz
 ```
