@@ -7,7 +7,7 @@
 set -eu
 
 DEST="${1:-./supersonic2-model}"
-URL="https://github.com/DavidValin/supersonic2-tts/releases/download/1.1.0/supersonic2-model.tgz"
+URL="https://github.com/DavidValin/supersonic2-tts/releases/download/1.2.0/supersonic2-model.tgz"
 
 if [ -s "$DEST/onnx/tts.json" ] && [ -s "$DEST/voice_styles/M1.json" ]; then
   echo "exists   $DEST (delete it to download again)"

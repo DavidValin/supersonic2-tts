@@ -3,7 +3,7 @@
 Extremely fast tts for rust with realistic voices, different styles, speed support.
 Perfect for embedded devices.
 
-* Model size: 234 MB [⬇️Download](https://github.com/DavidValin/supersonic2-tts/releases/download/1.1.0/supersonic2-model.tgz)
+* Model size: 234 MB [⬇️Download](https://github.com/DavidValin/supersonic2-tts/releases/download/1.2.0/supersonic2-model.tgz)
 
 ## Language support / Voice styles
 
@@ -18,7 +18,7 @@ Perfect for embedded devices.
 ## Download the model
 
 The model (ONNX files + voice styles) is packaged as a single archive in the GitHub release:
-https://github.com/DavidValin/supersonic2-tts/releases/download/1.1.0/supersonic2-model.tgz
+https://github.com/DavidValin/supersonic2-tts/releases/download/1.2.0/supersonic2-model.tgz
 
 Use the bundled script (curl + tar, ~234 MB, no git-lfs needed; the archive includes the model LICENSE):
 ```sh
@@ -86,7 +86,54 @@ All options:
 -l, --language <LANGUAGE>         Language code (en, es, fr, ko, pt) [default: en]
 -s, --speed <SPEED>               Speech speed (1.0 = normal, >1.0 faster, <1.0 slower) [default: 1.0]
 -q, --voice-quality <QUALITY>     Voice quality (denoising steps): 5 (fastest) .. 12 (best) [default: 5]
+-g, --gpu                         Synthesize on the GPU (needs a build with a GPU feature, see below)
+    --gpu-device <ID>             GPU device id to use with --gpu (0 = first GPU) [default: 0]
 ```
+
+## GPU synthesis
+
+By default everything runs on the CPU and no GPU feature is enabled. To
+synthesize on a GPU, build with the feature that matches your hardware:
+
+| Feature    | Hardware                        | Notes                                                                 |
+|------------|---------------------------------|-----------------------------------------------------------------------|
+| `cuda`     | NVIDIA (Linux/Windows x86_64)   | Needs the CUDA toolkit and cuDNN runtime libraries installed          |
+| `tensorrt` | NVIDIA (Linux/Windows x86_64)   | Needs TensorRT; unsupported ops fall back to CUDA (implies `cuda`)    |
+| `rocm`     | AMD (Linux x86_64)              | No prebuilt binaries: point `ORT_LIB_LOCATION` at a ROCm build of ONNX Runtime |
+| `directml` | Any GPU on Windows              | Uses DirectML                                                         |
+| `coreml`   | Apple Silicon / macOS           | Uses CoreML (GPU / Neural Engine)                                     |
+
+For `cuda` and `tensorrt` the `ort` crate downloads a matching prebuilt ONNX
+Runtime at build time (CUDA 12 by default; set `ORT_CUDA_VERSION=13` for CUDA 13).
+DirectML and CoreML are part of the standard Windows / macOS binaries. ONNX
+Runtime ships no prebuilt ROCm binaries, so `rocm` requires a self-built
+ONNX Runtime with ROCm enabled, found through `ORT_LIB_LOCATION`.
+
+```sh
+cargo build --release --features cuda
+
+./target/release/main \
+    --root-models-path ./supersonic2-model \
+    --text "Now running on the GPU" \
+    --voice F4 \
+    --gpu \
+    --output output.wav
+```
+
+`--gpu` fails with an error (instead of silently falling back to the CPU) when
+the binary was built without a GPU feature or the driver / runtime libraries
+are missing. Without `--gpu` a GPU build still synthesizes on the CPU.
+
+From the library:
+
+```rust
+use supersonic2_tts::{Device, TtsEngine, gpu_support_compiled};
+
+let device = if gpu_support_compiled() { Device::gpu() } else { Device::Cpu };
+let engine = TtsEngine::new_with_device(onnx, base, false, device).await?;
+```
+
+`Device::Gpu { device_id }` selects the GPU when several are installed.
 
 ## Using as library
 
@@ -138,7 +185,11 @@ The public API is intentionally minimal:
 
 * `TtsEngine::new()` – loads the default assets next to the binary.
 * `TtsEngine::new(onnx_dir, base_path, verbose)` – allows you to point
-  the engine at any directory structure.
+  the engine at any directory structure (runs on the CPU).
+* `TtsEngine::new_with_device(onnx_dir, base_path, verbose, device)` – same, on a
+  chosen `Device` (`Device::Cpu` or `Device::Gpu { device_id }`, see "GPU synthesis").
+* `gpu_support_compiled()` / `compiled_gpu_backends()` – whether (and which) GPU
+  backends were compiled in through the crate features.
 * `synthesize_with_options(text, voice, speed, gain, language, voice_quality)` – synthesize
   text with optional voice style, speed, gain, language and voice quality (`voice_quality` =
   denoising steps: 5 fastest .. 12 best, `None` = engine default 5; values outside that range

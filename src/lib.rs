@@ -2,6 +2,7 @@ pub mod helper;
 
 use anyhow::{anyhow, Result};
 use helper::{load_text_to_speech, load_voice_style, set_verbose, write_wav_file, TextToSpeech};
+pub use helper::{compiled_gpu_backends, gpu_support_compiled, Device};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -42,22 +43,46 @@ pub struct TtsEngine {
     base_path: PathBuf,
     verbose: bool,
     voice_quality: usize,
+    device: Device,
 }
 
 impl TtsEngine {
-    /// Create a new TTS engine. Loads the ONNX model files from the provided `onnx_dir`.
+    /// Create a new TTS engine running on the CPU. Loads the ONNX model files
+    /// from the provided `onnx_dir`.
     pub async fn new(onnx_dir: PathBuf, base_path: PathBuf, verbose: bool) -> Result<Self> {
+        Self::new_with_device(onnx_dir, base_path, verbose, Device::Cpu).await
+    }
+
+    /// Create a new TTS engine running on `device`.
+    ///
+    /// [`Device::Gpu`] requires the crate to be built with a GPU feature
+    /// (`cuda`, `tensorrt`, `rocm`, `directml` or `coreml`) and the matching
+    /// driver / runtime libraries to be installed. Otherwise an error is
+    /// returned (there is no silent CPU fallback). Use
+    /// [`gpu_support_compiled`] to check the build before asking for a GPU.
+    pub async fn new_with_device(
+        onnx_dir: PathBuf,
+        base_path: PathBuf,
+        verbose: bool,
+        device: Device,
+    ) -> Result<Self> {
         if !onnx_dir.exists() {
             std::fs::create_dir_all(&onnx_dir)?;
         }
-        let tts = load_text_to_speech(onnx_dir.to_str().unwrap(), false)?;
         set_verbose(verbose);
+        let tts = load_text_to_speech(onnx_dir.to_str().unwrap(), device)?;
         Ok(Self {
             inner: Arc::new(Mutex::new(tts)),
             base_path,
             verbose,
             voice_quality: DEFAULT_VOICE_QUALITY,
+            device,
         })
+    }
+
+    /// The device the models run on.
+    pub fn device(&self) -> Device {
+        self.device
     }
 
     /// Change the default voice quality (denoising steps, quality vs speed)

@@ -809,10 +809,141 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
     })
 }
 
-/// Load TTS components
-pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech> {
-    if use_gpu {
-        anyhow::bail!("GPU mode is not supported yet");
+// ============================================================================
+// Compute device selection (CPU / GPU execution providers)
+// ============================================================================
+
+/// Where the ONNX models are executed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Device {
+    /// Run on the CPU (default, always available).
+    Cpu,
+    /// Run on a GPU using the execution provider(s) compiled in through the
+    /// crate features (`cuda`, `tensorrt`, `rocm`, `directml`, `coreml`).
+    /// `device_id` selects the GPU when several are present (0 = first).
+    /// It is ignored by backends without device selection (CoreML).
+    Gpu { device_id: i32 },
+}
+
+impl Default for Device {
+    fn default() -> Self {
+        Device::Cpu
+    }
+}
+
+impl Device {
+    /// GPU with the first device (id 0).
+    pub fn gpu() -> Self {
+        Device::Gpu { device_id: 0 }
+    }
+
+    pub fn is_gpu(&self) -> bool {
+        matches!(self, Device::Gpu { .. })
+    }
+}
+
+/// Names of the GPU backends this binary was compiled with, in the order
+/// they are tried. Empty when built without any GPU feature.
+pub fn compiled_gpu_backends() -> Vec<&'static str> {
+    #[allow(unused_mut)]
+    let mut backends: Vec<&'static str> = Vec::new();
+    #[cfg(feature = "tensorrt")]
+    backends.push("TensorRT");
+    #[cfg(feature = "cuda")]
+    backends.push("CUDA");
+    #[cfg(feature = "rocm")]
+    backends.push("ROCm");
+    #[cfg(feature = "directml")]
+    backends.push("DirectML");
+    #[cfg(feature = "coreml")]
+    backends.push("CoreML");
+    backends
+}
+
+/// `true` when at least one GPU execution provider was compiled in.
+pub fn gpu_support_compiled() -> bool {
+    !compiled_gpu_backends().is_empty()
+}
+
+/// Build the list of ONNX Runtime execution providers for `device`.
+///
+/// For [`Device::Cpu`] the list is empty (ONNX Runtime uses its CPU provider).
+/// For [`Device::Gpu`] every compiled-in GPU provider is listed in preference
+/// order. The first (main) one is marked `error_on_failure` so that a missing
+/// driver / runtime library is reported instead of silently falling back to
+/// the CPU. TensorRT, when enabled, is followed by CUDA as ONNX Runtime uses
+/// it for the operators TensorRT does not support.
+fn execution_providers(device: Device) -> Result<Vec<ort::ep::ExecutionProviderDispatch>> {
+    let device_id = match device {
+        Device::Cpu => return Ok(Vec::new()),
+        Device::Gpu { device_id } => device_id,
+    };
+    if device_id < 0 {
+        bail!("Invalid GPU device id {}: must be >= 0", device_id);
+    }
+
+    #[allow(unused_mut, unused_variables)]
+    let mut eps: Vec<ort::ep::ExecutionProviderDispatch> = Vec::new();
+    #[cfg(feature = "tensorrt")]
+    eps.push(ort::ep::TensorRT::default().with_device_id(device_id).build());
+    #[cfg(feature = "cuda")]
+    eps.push(ort::ep::CUDA::default().with_device_id(device_id).build());
+    #[cfg(feature = "rocm")]
+    eps.push(ort::ep::ROCm::default().with_device_id(device_id).build());
+    #[cfg(feature = "directml")]
+    eps.push(ort::ep::DirectML::default().with_device_id(device_id).build());
+    #[cfg(feature = "coreml")]
+    eps.push(ort::ep::CoreML::default().build());
+
+    if eps.is_empty() {
+        bail!(
+            "GPU synthesis requested but this build has no GPU support. \
+             Rebuild with one of the GPU features, e.g. \
+             `cargo build --release --features cuda` \
+             (available: cuda, tensorrt, rocm, directml, coreml)"
+        );
+    }
+
+    // The main provider must register or we report the error: a silent CPU
+    // fallback is exactly what the caller asked to avoid.
+    let main = eps.remove(0).error_on_failure();
+    let mut all = vec![main];
+    all.extend(eps);
+    Ok(all)
+}
+
+/// Create an ONNX Runtime session for `path` on `device`.
+fn create_session(path: &str, eps: &[ort::ep::ExecutionProviderDispatch]) -> Result<Session> {
+    let builder = Session::builder()?;
+    let mut builder = if eps.is_empty() {
+        builder
+    } else {
+        builder
+            .with_execution_providers(eps.to_vec())
+            .map_err(|e| anyhow::anyhow!(
+                "Could not enable GPU execution for {} (compiled GPU backends: {}): {}. \
+                 Check that the GPU driver and runtime libraries (e.g. CUDA + cuDNN) are installed",
+                path,
+                compiled_gpu_backends().join(", "),
+                e
+            ))?
+    };
+    builder
+        .commit_from_file(path)
+        .with_context(|| format!("Failed to load ONNX model {}", path))
+}
+
+/// Load TTS components on the given [`Device`].
+pub fn load_text_to_speech(onnx_dir: &str, device: Device) -> Result<TextToSpeech> {
+    let eps = execution_providers(device)?;
+    if let Device::Gpu { device_id } = device {
+        if VERBOSE.load(Ordering::Relaxed) {
+            println!(
+                "Using GPU synthesis (device {}, backends: {})",
+                device_id,
+                compiled_gpu_backends().join(", ")
+            );
+        }
     }
 
     let cfgs = load_cfgs(onnx_dir)?;
@@ -822,14 +953,10 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = Session::builder()?
-        .commit_from_file(&dp_path)?;
-    let text_enc_ort = Session::builder()?
-        .commit_from_file(&text_enc_path)?;
-    let vector_est_ort = Session::builder()?
-        .commit_from_file(&vector_est_path)?;
-    let vocoder_ort = Session::builder()?
-        .commit_from_file(&vocoder_path)?;
+    let dp_ort = create_session(&dp_path, &eps)?;
+    let text_enc_ort = create_session(&text_enc_path, &eps)?;
+    let vector_est_ort = create_session(&vector_est_path, &eps)?;
+    let vocoder_ort = create_session(&vocoder_path, &eps)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
     let text_processor = UnicodeProcessor::new(&unicode_indexer_path)?;

@@ -1,6 +1,6 @@
 use clap::Parser;
 use anyhow::Result;
-use supersonic2_tts::TtsEngine;
+use supersonic2_tts::{Device, TtsEngine};
 use std::path::PathBuf;
 
 /// CLI arguments for the new example
@@ -32,6 +32,14 @@ struct Args {
     /// Voice quality (denoising steps): 5 (fastest) .. 12 (best quality)
     #[arg(long, short = 'q', default_value = "5")]
     voice_quality: usize,
+
+    /// Synthesize on the GPU (needs a build with a GPU feature: cuda, tensorrt, rocm, directml, coreml)
+    #[arg(long, short = 'g')]
+    gpu: bool,
+
+    /// GPU device id to use with --gpu (0 = first GPU)
+    #[arg(long, default_value = "0", requires = "gpu")]
+    gpu_device: i32,
 }
 
 #[tokio::main]
@@ -41,7 +49,12 @@ async fn main() -> Result<()> {
     // Initialize the engine
     let root_path = PathBuf::from(&args.root_models_path);
     let onnx_dir = root_path.join("onnx");
-    let engine = TtsEngine::new(onnx_dir, root_path, true).await?;
+    let device = if args.gpu {
+        Device::Gpu { device_id: args.gpu_device }
+    } else {
+        Device::Cpu
+    };
+    let engine = TtsEngine::new_with_device(onnx_dir, root_path, true, device).await?;
 
     // Synthesize
     let wav = engine
