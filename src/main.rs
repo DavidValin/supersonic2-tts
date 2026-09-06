@@ -28,6 +28,10 @@ struct Args {
     /// Speech speed factor (1.0 = normal, >1.0 faster, <1.0 slower)
     #[arg(long, short, default_value = "1.0")]
     speed: f32,
+
+    /// Voice quality (denoising steps): 5 (fastest) .. 12 (best quality)
+    #[arg(long, short = 'q', default_value = "5")]
+    voice_quality: usize,
 }
 
 #[tokio::main]
@@ -47,6 +51,7 @@ async fn main() -> Result<()> {
             args.speed,
             1.0,
             Some(&args.language),
+            Some(args.voice_quality),
         )
         .await?;
 

@@ -8,10 +8,40 @@ use tokio::sync::Mutex;
 use cpal::Sample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+/// Default voice quality (number of flow-matching denoising steps).
+/// 5 is the fastest (and the historical default of this crate), 12 is the
+/// best quality at the cost of more vector-estimator time.
+pub const DEFAULT_VOICE_QUALITY: usize = 5;
+
+/// Minimum allowed voice quality (fastest, lowest quality).
+pub const MIN_VOICE_QUALITY: usize = 5;
+
+/// Maximum allowed voice quality (slowest, best quality).
+pub const MAX_VOICE_QUALITY: usize = 12;
+
+/// Validate a voice quality value against the allowed range
+/// [`MIN_VOICE_QUALITY`]..=[`MAX_VOICE_QUALITY`].
+pub fn validate_voice_quality(voice_quality: usize) -> Result<usize> {
+    if (MIN_VOICE_QUALITY..=MAX_VOICE_QUALITY).contains(&voice_quality) {
+        Ok(voice_quality)
+    } else {
+        Err(anyhow!(
+            "Invalid voice_quality value {}: must be between {} (fastest) and {} (best quality)",
+            voice_quality,
+            MIN_VOICE_QUALITY,
+            MAX_VOICE_QUALITY
+        ))
+    }
+}
+
+/// Silence inserted between text chunks, in seconds.
+pub const DEFAULT_SILENCE_DURATION: f32 = 0.3;
+
 pub struct TtsEngine {
     inner: Arc<Mutex<TextToSpeech>>,
     base_path: PathBuf,
     verbose: bool,
+    voice_quality: usize,
 }
 
 impl TtsEngine {
@@ -26,11 +56,30 @@ impl TtsEngine {
             inner: Arc::new(Mutex::new(tts)),
             base_path,
             verbose,
+            voice_quality: DEFAULT_VOICE_QUALITY,
         })
     }
 
+    /// Change the default voice quality (denoising steps, quality vs speed)
+    /// used by `synthesize_with_options` when called with `voice_quality = None`.
+    /// Allowed range is 5 (fastest) to 12 (best quality), default 5.
+    pub fn with_voice_quality(mut self, voice_quality: usize) -> Result<Self> {
+        self.voice_quality = validate_voice_quality(voice_quality)?;
+        Ok(self)
+    }
 
-    /// Synthesize audio from text with optional voice style, speed, gain and language.
+    /// Default voice quality used when none is passed.
+    pub fn voice_quality(&self) -> usize {
+        self.voice_quality
+    }
+
+    /// Synthesize audio from text with optional voice style, speed, gain,
+    /// language and voice quality.
+    ///
+    /// `voice_quality`: number of denoising steps, from [`MIN_VOICE_QUALITY`]
+    /// (5, fastest) to [`MAX_VOICE_QUALITY`] (12, best). `None` uses the engine
+    /// default (5 unless changed with [`TtsEngine::with_voice_quality`]).
+    /// Out of range values return an error.
     pub async fn synthesize_with_options(
         &self,
         text: &str,
@@ -38,7 +87,12 @@ impl TtsEngine {
         speed: f32,
         gain: f32,
         language: Option<&str>,
+        voice_quality: Option<usize>,
     ) -> Result<Vec<f32>> {
+        let voice_quality = match voice_quality {
+            Some(q) => validate_voice_quality(q)?,
+            None => self.voice_quality,
+        };
         let base_path = match std::fs::canonicalize(&self.base_path) {
             Ok(p) => p,
             Err(_) => self.base_path.clone(),
@@ -66,9 +120,9 @@ impl TtsEngine {
             text,
             language.unwrap_or("en"),
             &voice_style,
-            5,
+            voice_quality,
             speed,
-            0.3,
+            DEFAULT_SILENCE_DURATION,
         )?;
         let wav: Vec<f32> = wav.iter().map(|x| x * gain).collect();
         Ok(wav)
@@ -141,5 +195,21 @@ impl TtsEngine {
     pub async fn sample_rate(&self) -> i32 {
         let tts = self.inner.lock().await;
         tts.sample_rate
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn voice_quality_range_is_validated() {
+        assert!(validate_voice_quality(MIN_VOICE_QUALITY - 1).is_err());
+        assert!(validate_voice_quality(MAX_VOICE_QUALITY + 1).is_err());
+        assert!(validate_voice_quality(0).is_err());
+        for q in MIN_VOICE_QUALITY..=MAX_VOICE_QUALITY {
+            assert_eq!(validate_voice_quality(q).unwrap(), q);
+        }
+        assert_eq!(DEFAULT_VOICE_QUALITY, 5);
     }
 }
