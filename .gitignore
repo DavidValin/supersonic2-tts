@@ -1,7 +1,14 @@
 # Rust build artifacts
 /target/
 
-# Output directory
+# Model files
+/supersonic2-model/
+/model/
+*.onnx
+*.tgz
+
+# Output
+*.wav
 /results/
 
 # IDE

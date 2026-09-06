@@ -142,50 +142,57 @@ impl TtsEngine {
     }
 
     /// Play the given audio buffer using the CPAL audio backend.
+    ///
+    /// The default output device is tried first. If it cannot be opened (for
+    /// example when ALSA `default` points at a sound card that PulseAudio or
+    /// PipeWire holds exclusively) any output device named `pulse` or
+    /// `pipewire` is tried next.
     pub async fn play_wav(&self, audio: &[f32]) -> Result<()> {
-        let sample_rate = self.sample_rate().await;
-        let audio_vec = audio.to_vec();
-        let sr = sample_rate;
+        let sample_rate = self.sample_rate().await as u32;
+        let audio = Arc::new(audio.to_vec());
+        let verbose = self.verbose;
         tokio::task::spawn_blocking(move || -> Result<()> {
             let host = cpal::default_host();
-            let device = host
-                .default_output_device()
-                .ok_or_else(|| anyhow!("No output device found"))?;
-            let mut supported = device
-                .supported_output_configs()
-                .map_err(|e| anyhow!(e))?;
-            let mut config = supported
-                .next()
-                .ok_or_else(|| anyhow!("No supported config"))?
-                .with_sample_rate(cpal::SampleRate(sr as u32))
-                .config();
-            config.channels = 1;
-            let audio_len = audio_vec.len();
-            let audio_arc = std::sync::Arc::new(audio_vec);
-            let index_arc = std::sync::Arc::new(std::sync::Mutex::new(0usize));
-            let err_fn = |err: cpal::StreamError| {
-                eprintln!("An error occurred on the output audio stream: {:?}", err);
-            };
-            let stream = device.build_output_stream(
-                &config,
-                move |data: &mut [f32], _| {
-                    let mut idx = index_arc.lock().unwrap();
-                    for sample in data.iter_mut() {
-                        if *idx < audio_len {
-                            *sample = Sample::from_sample(audio_arc[*idx]);
-                            *idx += 1;
-                        } else {
-                            *sample = Sample::from_sample(0.0);
+            let mut errors: Vec<String> = Vec::new();
+            let mut tried: Vec<String> = Vec::new();
+            // 1. the host default device
+            if let Some(device) = host.default_output_device() {
+                let name = device.name().unwrap_or_else(|_| "default".to_string());
+                match play_on_device(&device, Arc::clone(&audio), sample_rate) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        if verbose {
+                            eprintln!("Playback on '{}' failed: {}, trying pulse/pipewire", name, e);
                         }
+                        errors.push(format!("{}: {}", name, e));
                     }
-                },
-                err_fn,
-                None,
-            )?;
-            stream.play()?;
-            let duration = std::time::Duration::from_secs_f32(audio_len as f32 / sr as f32);
-            std::thread::sleep(duration);
-            Ok(())
+                }
+                tried.push(name);
+            }
+            // 2. sound server devices. Enumerated lazily: probing every ALSA
+            //    PCM is slow and noisy, so only do it when the default failed.
+            for (name, device) in sound_server_devices(&host) {
+                if tried.contains(&name) {
+                    continue;
+                }
+                match play_on_device(&device, Arc::clone(&audio), sample_rate) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        if verbose {
+                            eprintln!("Playback on '{}' failed: {}", name, e);
+                        }
+                        errors.push(format!("{}: {}", name, e));
+                    }
+                }
+            }
+            if errors.is_empty() {
+                Err(anyhow!("No output device found"))
+            } else {
+                Err(anyhow!(
+                    "Could not open any output device ({})",
+                    errors.join("; ")
+                ))
+            }
         })
         .await??;
         Ok(())
@@ -196,6 +203,79 @@ impl TtsEngine {
         let tts = self.inner.lock().await;
         tts.sample_rate
     }
+}
+
+/// Output devices named `pulse` or `pipewire`: ALSA plugins that route to the
+/// sound server instead of opening the card directly, usable even when the
+/// server holds the card exclusively.
+fn sound_server_devices(host: &cpal::Host) -> Vec<(String, cpal::Device)> {
+    let mut found: Vec<(String, cpal::Device)> = Vec::new();
+    if let Ok(devices) = host.output_devices() {
+        for device in devices {
+            let name = match device.name() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+            let is_server = name == "pulse"
+                || name == "pipewire"
+                || name.starts_with("pulse:")
+                || name.starts_with("pipewire:");
+            if is_server && !found.iter().any(|(n, _)| *n == name) {
+                found.push((name, device));
+            }
+        }
+    }
+    found
+}
+
+/// Pick a supported output config for `sample_rate`, preferring mono, then
+/// stereo, then anything with more channels.
+fn pick_output_config(device: &cpal::Device, sample_rate: u32) -> Result<cpal::StreamConfig> {
+    let rate = cpal::SampleRate(sample_rate);
+    let mut best: Option<cpal::SupportedStreamConfig> = None;
+    for range in device.supported_output_configs().map_err(|e| anyhow!(e))? {
+        if let Some(cfg) = range.try_with_sample_rate(rate) {
+            let better = match &best {
+                None => true,
+                Some(b) => cfg.channels() < b.channels(),
+            };
+            if better {
+                best = Some(cfg);
+            }
+        }
+    }
+    let cfg = best.ok_or_else(|| anyhow!("no output config supports {} Hz", sample_rate))?;
+    Ok(cfg.config())
+}
+
+/// Open an output stream on `device` and block until `audio` has been played.
+fn play_on_device(device: &cpal::Device, audio: Arc<Vec<f32>>, sample_rate: u32) -> Result<()> {
+    let config = pick_output_config(device, sample_rate)?;
+    let channels = config.channels.max(1) as usize;
+    let audio_len = audio.len();
+    let index = Arc::new(std::sync::Mutex::new(0usize));
+    let err_fn = |err: cpal::StreamError| {
+        eprintln!("An error occurred on the output audio stream: {:?}", err);
+    };
+    let stream = device.build_output_stream(
+        &config,
+        move |data: &mut [f32], _| {
+            let mut idx = index.lock().unwrap();
+            for frame in data.chunks_mut(channels) {
+                let value = if *idx < audio_len { audio[*idx] } else { 0.0 };
+                *idx += 1;
+                for sample in frame.iter_mut() {
+                    *sample = Sample::from_sample(value);
+                }
+            }
+        },
+        err_fn,
+        None,
+    )?;
+    stream.play()?;
+    let duration = std::time::Duration::from_secs_f32(audio_len as f32 / sample_rate as f32);
+    std::thread::sleep(duration + std::time::Duration::from_millis(100));
+    Ok(())
 }
 
 #[cfg(test)]
