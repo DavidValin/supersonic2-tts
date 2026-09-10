@@ -2,7 +2,7 @@
 /target/
 
 # Model files
-/supersonic2-model/
+/supertonic2-model/
 /model/
 *.onnx
 *.tgz

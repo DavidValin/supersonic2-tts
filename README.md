@@ -1,9 +1,9 @@
-# supersonic2-tts
+# supertonic2-tts
 
 Extremely fast tts for rust with realistic voices, different styles, speed support.
 Perfect for embedded devices.
 
-* Model size: 234 MB [⬇️Download](https://github.com/DavidValin/supersonic2-tts/releases/download/1.2.0/supersonic2-model.tgz)
+* Model size: 234 MB [⬇️Download](https://github.com/DavidValin/supertonic2-tts/releases/download/1.2.0/supertonic2-model.tgz)
 
 ## Language support / Voice styles
 
@@ -18,16 +18,16 @@ Perfect for embedded devices.
 ## Download the model
 
 The model (ONNX files + voice styles) is packaged as a single archive in the GitHub release:
-https://github.com/DavidValin/supersonic2-tts/releases/download/1.2.0/supersonic2-model.tgz
+https://github.com/DavidValin/supertonic2-tts/releases/download/1.2.0/supertonic2-model.tgz
 
 Use the bundled script (curl + tar, ~234 MB, no git-lfs needed; the archive includes the model LICENSE):
 ```sh
-sh scripts/download-model.sh ./supersonic2-model
+sh scripts/download-model.sh ./supertonic2-model
 ```
 
 Expected layout:
 ```
-supersonic2-model/
+supertonic2-model/
 ├── LICENSE            (BigScience Open RAIL-M, the model license)
 ├── onnx/
 │   ├── duration_predictor.onnx
@@ -45,11 +45,11 @@ supersonic2-model/
 
 A small cli is provided in `src/main.rs`.  It exposes the same options as the library but as a command‑line interface.
 
-Download the supersonic 2 model (see above), then synthetize and play it:
+Download the Supertonic 2 model (see above), then synthetize and play it:
 ```sh
 cargo run -- \
-    --root-models-path ./supersonic2-model \
-    --text "Hey man! supersonic 2 is as fast as a porche. How do you like it so far?" \
+    --root-models-path ./supertonic2-model \
+    --text "Hey man! Supertonic 2 is as fast as a porche. How do you like it so far?" \
     --voice F4 \
     --language en \
     --speed 1.2
@@ -58,7 +58,7 @@ cargo run -- \
 Synthetize and save it:
 ```sh
 cargo run -- \
-    --root-models-path ./supersonic2-model \
+    --root-models-path ./supertonic2-model \
     --text 'Hola amigo!. ¡Éste sistema de audio es increíble y rapidísimo! ¿Qué te parece?' \
     --voice M1 \
     --language es \
@@ -69,8 +69,8 @@ cargo run -- \
 With the best voice quality (12, slower; default is 5, the fastest):
 ```sh
 cargo run -- \
-    --root-models-path ./supersonic2-model \
-    --text "Hey man! supersonic 2 is as fast as a porche. How do you like it so far?" \
+    --root-models-path ./supertonic2-model \
+    --text "Hey man! Supertonic 2 is as fast as a porche. How do you like it so far?" \
     --voice F4 \
     --language en \
     --voice-quality 12 \
@@ -82,7 +82,7 @@ All options:
 -t, --text <TEXT>                 Text to synthesize
 -v, --voice <VOICE>               Voice style id (M1-M5, F1-F5) or path to a voice style JSON [default: M1]
 -o, --output <OUTPUT>             Output WAV file path (plays the audio when omitted)
--r, --root-models-path <PATH>     Root folder of the model [default: ./supersonic2-model]
+-r, --root-models-path <PATH>     Root folder of the model [default: ./supertonic2-model]
 -l, --language <LANGUAGE>         Language code (en, es, fr, ko, pt) [default: en]
 -s, --speed <SPEED>               Speech speed (1.0 = normal, >1.0 faster, <1.0 slower) [default: 1.0]
 -q, --voice-quality <QUALITY>     Voice quality (denoising steps): 5 (fastest) .. 12 (best) [default: 5]
@@ -113,7 +113,7 @@ ONNX Runtime with ROCm enabled, found through `ORT_LIB_LOCATION`.
 cargo build --release --features cuda
 
 ./target/release/main \
-    --root-models-path ./supersonic2-model \
+    --root-models-path ./supertonic2-model \
     --text "Now running on the GPU" \
     --voice F4 \
     --gpu \
@@ -127,7 +127,7 @@ are missing. Without `--gpu` a GPU build still synthesizes on the CPU.
 From the library:
 
 ```rust
-use supersonic2_tts::{Device, TtsEngine, gpu_support_compiled};
+use supertonic2_tts::{Device, TtsEngine, gpu_support_compiled};
 
 let device = if gpu_support_compiled() { Device::gpu() } else { Device::Cpu };
 let engine = TtsEngine::new_with_device(onnx, base, false, device).await?;
@@ -137,24 +137,24 @@ let engine = TtsEngine::new_with_device(onnx, base, false, device).await?;
 
 ## Using as library
 
-Download the supersonic 2 model (see above).
+Download the Supertonic 2 model (see above).
 
 Install crate, add dependency to your Cargo.toml
 ```
-cargo install supersonic2-tts
+cargo install supertonic2-tts
 ```
 
 Use the library (example):
 
 ```rust
-use supersonic2_tts::TtsEngine;
+use supertonic2_tts::TtsEngine;
 use std::path::PathBuf;
 use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Path to the folder that contains `onnx` and voice style JSON files
-    let base = PathBuf::from("./supersonic2-model");
+    let base = PathBuf::from("./supertonic2-model");
     let onnx = base.join("onnx");
 
     // Create a new engine with the custom base path
@@ -202,4 +202,4 @@ The public API is intentionally minimal:
 ## LICENSE
 
 * Source code: MIT
-* Supersonic2 model: BigScience Open RAIL-M License
+* Supertonic2 model: BigScience Open RAIL-M License, from [supertone-inc/supertonic](https://github.com/supertone-inc/supertonic)

@@ -1,11 +1,11 @@
 [package]
-name = "supersonic2-tts"
-description = "extremely fast tts using supersonic 2 model"
+name = "supertonic2-tts"
+description = "extremely fast tts using Supertonic 2 model"
 version = "1.2.0"
 edition = "2021"
 default-run = "main"
 license = "MIT"
-repository = "https://github.com/DavidValin/supersonic2-tts"
+repository = "https://github.com/DavidValin/supertonic2-tts"
 authors = ["ANLGBOY", "David Valin"]
 
 [dependencies]

@@ -1,6 +1,6 @@
 use clap::Parser;
 use anyhow::Result;
-use supersonic2_tts::{Device, TtsEngine};
+use supertonic2_tts::{Device, TtsEngine};
 use std::path::PathBuf;
 
 /// CLI arguments for the new example
@@ -19,7 +19,7 @@ struct Args {
     output: String,
 
     /// Language for synthesis (e.g., "en", "es", etc.)
-    #[arg(long, short, default_value = "./supersonic2-model")]
+    #[arg(long, short, default_value = "./supertonic2-model")]
     root_models_path: String,
 
     #[arg(long, short, default_value = "en")]
